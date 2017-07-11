@@ -17,20 +17,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import re
 import math
-from ..Lexer import VARIABLE_MATCH
+from ..Lexer import VARIABLE_MATCH, VARIABLE, Lexer
 
 class Script:
     def __init__(self, name, p=False):
         self.name = name
         self.p = p
         self.pattern = r"{" + ("%" if p else "{") + r"\s*(?:" + name + r"\s*"
-        self.arguments = {}
+        self.arguments = ArgumentList()
         self.finished = False
 
-    def addArgument(self, name, allowed=".", optional=False, default=None, minLength=1, maxLength=math.inf, variableAllowed=False):
+    def addArgument(self, name, allowed=".", optional=False, default=None, minLength=1, maxLength=math.inf, variableAllowed=False, shouldVarExist=True):
         if optional and default is None:
             raise ValueError("Optional Argument must have a default value")
-        self.arguments[name] = (None if not optional else default)
+        # self.arguments[name] = (None if not optional else default)
+        self.arguments[name] = Argument(name, optional, default, variableAllowed, shouldVarExist)
 
         length = "*"
         if minLength <= 0 or maxLength == math.inf:
@@ -46,7 +47,7 @@ class Script:
         if allowed and variableAllowed:
             self.pattern += "|"
         if variableAllowed:
-            self.pattern += r"\$\$" + VARIABLE_MATCH
+            self.pattern += r"\$\$[" + VARIABLE_MATCH + r"]+"
         self.pattern += ")" + ("?" if optional else "") + r"\s*"
         return self
 
@@ -70,8 +71,11 @@ class Script:
 
         orgi = self.arguments
         for m in self.pattern.finditer(body):
+            print(self.arguments)
             for k in self.arguments.keys():
-                self.arguments[k] = (m.group(k) if m.group(k) != "" else self.arguments[k])
+                group = m.group(k)
+                # self.arguments[k] = (group if group != "" else self.arguments[k])
+                self.arguments[k].setValue(group)
             #print(m.group(0))
             r = self.run()
             body = body.replace(m.group(0), r if r is not None else "")
@@ -86,16 +90,55 @@ class Script:
 class Block(Script):
     def __init__(self, name):
         super(Block, self).__init__(name)
-        self.arguments["content"] = ""
+        self.arguments["content"] = Argument("content")
 
-    def addArgument(self, name, allowed=".", optional=False, default=None, minLength=1, maxLength=math.inf, variableAllowed=False):
+    def addArgument(self, name, allowed=".", optional=False, default=None, minLength=1, maxLength=math.inf, variableAllowed=False, shouldVarExist=True):
         if name == "content":
             raise ValueError
         return super().addArgument(name=name, allowed=allowed, optional=optional, default=default, minLength=minLength, maxLength=maxLength, variableAllowed=variableAllowed)
 
     def finish(self):
         self.pattern += r")\s*}}(?P<content>(?:.|\n)*){{\s*end" + self.name + r"\s*}}"
-        print(self.pattern)
 
     def run(self):
         raise NotImplementedError
+
+class Argument:
+    def __init__(self, name, optional=False, default=None, variableAllowed=False, shouldVarExist=True):
+        self.name = name
+        self.value = None
+        self.optional = optional
+        self.default = default
+        self.variableAllowed = variableAllowed
+        self.shouldVarExist = shouldVarExist
+
+    def setValue(self, val=None):
+        if val:
+            if self.variableAllowed:
+                m = VARIABLE.match(val)
+                if m:
+                    var = m.group(1)
+                    if self.shouldVarExist:
+                        self.value = Lexer.getArg(var)
+                    else:
+                        self.value = var
+            else:
+                self.value = val
+        elif self.optional:
+            self.value = self.default
+
+    def getValue(self):
+        return self.value
+
+    def __str__(self):
+        return self.getValue()
+
+class ArgumentList(dict):
+    def __init__(self, **elements):
+        super(ArgumentList, self).__init__(**elements)
+
+    def __getitem__(self, item):
+        item = super(ArgumentList, self).__getitem__(item)
+        if isinstance(item, Argument):
+            return item.getValue()
+        return TypeError
