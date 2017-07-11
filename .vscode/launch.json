@@ -7,7 +7,7 @@
             "request": "launch",
             "stopOnEntry": true,
             "pythonPath": "${config:python.pythonPath}",
-            "program": "/Users/Dominic/Google Drive/Coding/Python/Blank Web Template/start.py",
+            "program": "/Users/Dominic/Documents/Python/Python-Basic-Web-App/start.py",
             "cwd": "${workspaceRoot}",
             "debugOptions": [
                 "WaitOnAbnormalExit",
